@@ -6,7 +6,7 @@ use crate::{
     SHADER_HANDLE,
 };
 use bevy::{
-    core_pipeline::{AlphaMask3d, Opaque3d, Transparent3d},
+    core_pipeline::core_3d::{AlphaMask3d, Opaque3d, Transparent3d},
     ecs::system::{
         lifetimeless::{Read, SQuery, SRes},
         SystemParamItem,
@@ -15,9 +15,9 @@ use bevy::{
     reflect::TypeUuid,
     render::{
         render_asset::{RenderAsset, RenderAssetPlugin, RenderAssets},
-        render_component::ExtractComponentPlugin,
+        extract_component::ExtractComponentPlugin,
         render_phase::*,
-        render_resource::{std140::AsStd140, std140::Std140, *},
+        render_resource::{*, encase::{ShaderType, self}},
         renderer::RenderDevice,
         view::{ExtractedView, ViewUniformOffset, VisibleEntities},
         RenderApp, RenderStage,
@@ -86,8 +86,8 @@ impl PolylineMaterial {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: BufferSize::new(
-                        PolylineMaterialUniform::std140_size_static() as u64,
+                    min_binding_size: Some(
+                        PolylineMaterialUniform::min_size()
                     ),
                 },
                 count: None,
@@ -108,7 +108,7 @@ impl PolylineMaterial {
     }
 }
 
-#[derive(AsStd140, Component, Clone)]
+#[derive(ShaderType, Component, Clone)]
 pub struct PolylineMaterialUniform {
     pub color: Vec4,
     pub depth_bias: f32,
@@ -143,12 +143,14 @@ impl RenderAsset for PolylineMaterial {
             depth_bias: material.depth_bias,
             color: material.color.as_linear_rgba_f32().into(),
         };
-        let value_std140 = value.as_std140();
+        let byte_buffer = [0u8; PolylineMaterialUniform::SHADER_SIZE.get() as usize];
+        let mut buffer = encase::UniformBuffer::new(byte_buffer);
+        buffer.write(&value).unwrap();
 
         let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("polyline_material_uniform_buffer"),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            contents: value_std140.as_bytes(),
+            contents: buffer.as_ref(),
         });
 
         let bind_group = render_device.create_bind_group(&BindGroupDescriptor {
@@ -330,8 +332,7 @@ pub fn queue_material_polylines(
             .get_id::<DrawMaterial>()
             .unwrap();
 
-        let inverse_view_matrix = view.transform.compute_matrix().inverse();
-        let inverse_view_row_2 = inverse_view_matrix.row(2);
+        let rangefinder = view.rangefinder3d();
         let mut polyline_key = PolylinePipelineKey::from_msaa_samples(msaa.samples);
 
         for visible_entity in &visible_entities.entities {
@@ -346,20 +347,14 @@ pub fn queue_material_polylines(
                     let pipeline_id =
                         pipelines.specialize(&mut pipeline_cache, &material_pipeline, polyline_key);
 
-                    // NOTE: row 2 of the inverse view matrix dotted with column 3 of the model matrix
-                    // gives the z component of translation of the mesh in view space
-                    let polyline_z = inverse_view_row_2.dot(polyline_uniform.transform.col(3));
+                    let distance = rangefinder.distance(&polyline_uniform.transform);
                     match material.alpha_mode {
                         AlphaMode::Opaque => {
                             opaque_phase.add(Opaque3d {
                                 entity: *visible_entity,
                                 draw_function: draw_opaque,
                                 pipeline: pipeline_id,
-                                // NOTE: Front-to-back ordering for opaque with ascending sort means near should have the
-                                // lowest sort key and getting further away should increase. As we have
-                                // -z in front of the camera, values in view space decrease away from the
-                                // camera. Flipping the sign of mesh_z results in the correct front-to-back ordering
-                                distance: -polyline_z,
+                                distance,
                             });
                         }
                         AlphaMode::Mask(_) => {
@@ -367,11 +362,7 @@ pub fn queue_material_polylines(
                                 entity: *visible_entity,
                                 draw_function: draw_alpha_mask,
                                 pipeline: pipeline_id,
-                                // NOTE: Front-to-back ordering for alpha mask with ascending sort means near should have the
-                                // lowest sort key and getting further away should increase. As we have
-                                // -z in front of the camera, values in view space decrease away from the
-                                // camera. Flipping the sign of mesh_z results in the correct front-to-back ordering
-                                distance: -polyline_z,
+                                distance,
                             });
                         }
                         AlphaMode::Blend => {
@@ -379,11 +370,7 @@ pub fn queue_material_polylines(
                                 entity: *visible_entity,
                                 draw_function: draw_transparent,
                                 pipeline: pipeline_id,
-                                // NOTE: Back-to-front ordering for transparent with ascending sort means far should have the
-                                // lowest sort key and getting closer should increase. As we have
-                                // -z in front of the camera, the largest distance is -far with values increasing toward the
-                                // camera. As such we can just use mesh_z as the distance
-                                distance: polyline_z,
+                                distance,
                             });
                         }
                     }
