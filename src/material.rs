@@ -31,6 +31,7 @@ pub struct PolylineMaterial {
     pub width: f32,
     pub color: Color,
     pub perspective: bool,
+    pub depth_test: bool,
 }
 
 impl Default for PolylineMaterial {
@@ -39,6 +40,7 @@ impl Default for PolylineMaterial {
             width: 10.0,
             color: Color::WHITE,
             perspective: false,
+            depth_test: true,
         }
     }
 }
@@ -93,6 +95,7 @@ pub struct GpuPolylineMaterial {
     pub perspective: bool,
     pub bind_group: BindGroup,
     pub alpha_mode: AlphaMode,
+    pub depth_test: bool,
 }
 
 impl RenderAsset for PolylineMaterial {
@@ -143,6 +146,7 @@ impl RenderAsset for PolylineMaterial {
             perspective: material.perspective,
             alpha_mode,
             bind_group,
+            depth_test: material.depth_test,
         })
     }
 }
@@ -315,8 +319,25 @@ pub fn queue_material_polylines(
                     if material.perspective {
                         polyline_key |= PolylinePipelineKey::PERSPECTIVE
                     }
+                    if !material.depth_test {
+                        polyline_key |= PolylinePipelineKey::DEPTH_COMPARE_ALWAYS
+                    }
                     let pipeline_id =
                         pipelines.specialize(&mut pipeline_cache, &material_pipeline, polyline_key);
+
+                    if !material.depth_test {
+                        transparent_phase.add(Transparent3d {
+                            entity: *visible_entity,
+                            draw_function: draw_transparent,
+                            pipeline: pipeline_id,
+                            // NOTE: Front-to-back ordering for opaque with ascending sort means near should have the
+                            // lowest sort key and getting further away should increase. As we have
+                            // -z in front of the camera, values in view space decrease away from the
+                            // camera. Flipping the sign of mesh_z results in the correct front-to-back ordering
+                            distance: 0.0,
+                        });
+                        continue;
+                    }
 
                     // NOTE: row 2 of the inverse view matrix dotted with column 3 of the model matrix
                     // gives the z component of translation of the mesh in view space

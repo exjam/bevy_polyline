@@ -236,7 +236,8 @@ impl SpecializedPipeline for PolylinePipeline {
             depth_stencil: Some(DepthStencilState {
                 format: TextureFormat::Depth32Float,
                 depth_write_enabled,
-                depth_compare: CompareFunction::Greater,
+                depth_compare:
+                if key.contains(PolylinePipelineKey::DEPTH_COMPARE_ALWAYS) { CompareFunction::Always } else { CompareFunction::Greater },
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -267,6 +268,7 @@ bitflags::bitflags! {
         const NONE = 0;
         const PERSPECTIVE = (1 << 0);
         const TRANSPARENT_MAIN_PASS = (1 << 1);
+        const DEPTH_COMPARE_ALWAYS = (1 << 2);
         const MSAA_RESERVED_BITS = PolylinePipelineKey::MSAA_MASK_BITS << PolylinePipelineKey::MSAA_SHIFT_BITS;
     }
 }
