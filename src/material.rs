@@ -166,7 +166,7 @@ impl Plugin for PolylineMaterialPlugin {
                 .add_render_command::<Opaque3d, DrawMaterial>()
                 .add_render_command::<AlphaMask3d, DrawMaterial>()
                 .init_resource::<PolylineMaterialPipeline>()
-                .init_resource::<SpecializedPipelines<PolylineMaterialPipeline>>()
+                .init_resource::<SpecializedRenderPipelines<PolylineMaterialPipeline>>()
                 .add_system_to_stage(RenderStage::Queue, queue_material_polylines);
         }
     }
@@ -194,7 +194,7 @@ impl FromWorld for PolylineMaterialPipeline {
     }
 }
 
-impl SpecializedPipeline for PolylineMaterialPipeline {
+impl SpecializedRenderPipeline for PolylineMaterialPipeline {
     type Key = PolylinePipelineKey;
     fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
         let mut descriptor = self.polyline_pipeline.specialize(key);
@@ -277,8 +277,8 @@ pub fn queue_material_polylines(
     alpha_mask_draw_functions: Res<DrawFunctions<AlphaMask3d>>,
     transparent_draw_functions: Res<DrawFunctions<Transparent3d>>,
     material_pipeline: Res<PolylineMaterialPipeline>,
-    mut pipelines: ResMut<SpecializedPipelines<PolylineMaterialPipeline>>,
-    mut pipeline_cache: ResMut<RenderPipelineCache>,
+    mut pipelines: ResMut<SpecializedRenderPipelines<PolylineMaterialPipeline>>,
+    mut pipeline_cache: ResMut<PipelineCache>,
     msaa: Res<Msaa>,
     render_materials: Res<RenderAssets<PolylineMaterial>>,
     material_meshes: Query<(&Handle<PolylineMaterial>, &PolylineUniform)>,
