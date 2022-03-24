@@ -10,9 +10,9 @@ use bevy::{
     reflect::TypeUuid,
     render::{
         render_asset::{RenderAsset, RenderAssetPlugin, RenderAssets},
-        render_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
+        extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
         render_phase::{EntityRenderCommand, RenderCommandResult, TrackedRenderPass},
-        render_resource::{std140::AsStd140, *},
+        render_resource::{*, encase::{ShaderType}},
         renderer::RenderDevice,
         texture::BevyDefault,
         view::{ViewUniform, ViewUniforms},
@@ -91,7 +91,7 @@ impl RenderAsset for Polyline {
     }
 }
 
-#[derive(AsStd140, Component, Clone)]
+#[derive(ShaderType, Component, Clone)]
 pub struct PolylineUniform {
     pub transform: Mat4,
     //pub inverse_transpose_model: Mat4,
@@ -153,7 +153,7 @@ impl FromWorld for PolylinePipeline {
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: true,
-                        min_binding_size: BufferSize::new(ViewUniform::std140_size_static() as u64),
+                        min_binding_size: Some(ViewUniform::min_size()),
                     },
                     count: None,
                 },
@@ -168,7 +168,7 @@ impl FromWorld for PolylinePipeline {
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: true,
-                    min_binding_size: BufferSize::new(PolylineUniform::std140_size_static() as u64),
+                    min_binding_size: Some(PolylineUniform::min_size()),
                 },
                 count: None,
             }],
