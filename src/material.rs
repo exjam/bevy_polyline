@@ -334,7 +334,7 @@ pub fn queue_material_polylines(
                             // lowest sort key and getting further away should increase. As we have
                             // -z in front of the camera, values in view space decrease away from the
                             // camera. Flipping the sign of mesh_z results in the correct front-to-back ordering
-                            distance: 0.0,
+                            distance: 99999999.0,
                         });
                         continue;
                     }
